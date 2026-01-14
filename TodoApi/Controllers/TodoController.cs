@@ -1,122 +1,135 @@
+using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
-using TodoApi.Models;
-using TodoApi.Services;
+using TodoApi.DTOs;
+using TodoApi.Interfaces;
 
 namespace TodoApi.Controllers
 {
+    /// <summary>
+    /// Controller for managing TODO items
+    /// </summary>
     [ApiController]
-    [Route("api")]
+    [Route("api/[controller]")]
     public class TodoController : ControllerBase
     {
-        public TodoController()
+        private readonly ITodoService _todoService;
+        private readonly IValidator<CreateTodoDto> _createValidator;
+        private readonly IValidator<UpdateTodoDto> _updateValidator;
+        private readonly ILogger<TodoController> _logger;
+
+        /// <summary>
+        /// Initializes a new instance of the TodoController
+        /// </summary>
+        /// <param name="todoService">The TODO service</param>
+        /// <param name="createValidator">Validator for creating TODOs</param>
+        /// <param name="updateValidator">Validator for updating TODOs</param>
+        /// <param name="logger">Logger instance</param>
+        public TodoController(
+            ITodoService todoService,
+            IValidator<CreateTodoDto> createValidator,
+            IValidator<UpdateTodoDto> updateValidator,
+            ILogger<TodoController> logger)
         {
+            _todoService = todoService;
+            _createValidator = createValidator;
+            _updateValidator = updateValidator;
+            _logger = logger;
         }
 
-        [HttpPost("createTodo")]
-        public IActionResult CreateTodo([FromBody] Todo todo)
+        /// <summary>
+        /// Get all TODO items
+        /// </summary>
+        /// <returns>List of all TODO items</returns>
+        [HttpGet]
+        public async Task<ActionResult<IEnumerable<TodoDto>>> GetAllTodos()
         {
-            try
-            {
-                var todoService = new TodoService();
-                var result = todoService.CreateTodo(todo);
-                return Ok(result);
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(ex.Message);
-            }
+            _logger.LogInformation("Getting all todos");
+            var todos = await _todoService.GetAllTodosAsync();
+            return Ok(todos);
         }
 
-        [HttpPost("getTodo")]
-        public IActionResult GetTodo([FromBody] GetTodoRequest request)
+        /// <summary>
+        /// Get a specific TODO item by ID
+        /// </summary>
+        /// <param name="id">The ID of the TODO item</param>
+        /// <returns>The TODO item if found</returns>
+        [HttpGet("{id}")]
+        public async Task<ActionResult<TodoDto>> GetTodo(int id)
         {
-            try
+            _logger.LogInformation("Getting todo with id: {Id}", id);
+            
+            var todo = await _todoService.GetTodoByIdAsync(id);
+            if (todo == null)
             {
-                var todoService = new TodoService();
-                if (request.Id.HasValue)
-                {
-                    var todo = todoService.GetTodoById(request.Id.Value);
-                    if (todo == null)
-                    {
-                        return NotFound();
-                    }
-                    return Ok(todo);
-                }
-                else
-                {
-                    var todos = todoService.GetAllTodos();
-                    return Ok(todos);
-                }
+                return NotFound($"Todo with id {id} not found");
             }
-            catch (Exception ex)
-            {
-                return BadRequest(ex.Message);
-            }
+
+            return Ok(todo);
         }
 
-        [HttpPost("updateTodo")]
-        public IActionResult UpdateTodo([FromBody] UpdateTodoRequest request)
+        /// <summary>
+        /// Create a new TODO item
+        /// </summary>
+        /// <param name="createTodoDto">The TODO item to create</param>
+        /// <returns>The created TODO item</returns>
+        [HttpPost]
+        public async Task<ActionResult<TodoDto>> CreateTodo([FromBody] CreateTodoDto createTodoDto)
         {
-            try
-            {
-                var todoService = new TodoService();
-                var existingTodo = todoService.GetTodoById(request.Id);
-                if (existingTodo == null)
-                {
-                    return NotFound();
-                }
+            _logger.LogInformation("Creating new todo");
 
-                var todo = new Todo
-                {
-                    Title = request.Title,
-                    Description = request.Description,
-                    IsCompleted = request.IsCompleted
-                };
-
-                var result = todoService.UpdateTodo(request.Id, todo);
-                return Ok(result);
-            }
-            catch (Exception ex)
+            var validationResult = await _createValidator.ValidateAsync(createTodoDto);
+            if (!validationResult.IsValid)
             {
-                return BadRequest(ex.Message);
+                return BadRequest(validationResult.Errors);
             }
+
+            var todo = await _todoService.CreateTodoAsync(createTodoDto);
+            return CreatedAtAction(nameof(GetTodo), new { id = todo.Id }, todo);
         }
 
-        [HttpPost("deleteTodo")]
-        public IActionResult DeleteTodo([FromBody] DeleteTodoRequest request)
+        /// <summary>
+        /// Update an existing TODO item
+        /// </summary>
+        /// <param name="id">The ID of the TODO item to update</param>
+        /// <param name="updateTodoDto">The updated TODO item data</param>
+        /// <returns>The updated TODO item</returns>
+        [HttpPut("{id}")]
+        public async Task<ActionResult<TodoDto>> UpdateTodo(int id, [FromBody] UpdateTodoDto updateTodoDto)
         {
-            try
+            _logger.LogInformation("Updating todo with id: {Id}", id);
+
+            var validationResult = await _updateValidator.ValidateAsync(updateTodoDto);
+            if (!validationResult.IsValid)
             {
-                var todoService = new TodoService();
-                var result = todoService.DeleteTodo(request.Id);
-                if (result)
-                {
-                    return Ok(new { message = "Todo deleted successfully" });
-                }
-                return NotFound();
+                return BadRequest(validationResult.Errors);
             }
-            catch (Exception ex)
+
+            var todo = await _todoService.UpdateTodoAsync(id, updateTodoDto);
+            if (todo == null)
             {
-                return BadRequest(ex.Message);
+                return NotFound($"Todo with id {id} not found");
             }
+
+            return Ok(todo);
         }
-    }
 
-    public class GetTodoRequest
-    {
-        public int? Id { get; set; }
-    }
+        /// <summary>
+        /// Delete a TODO item
+        /// </summary>
+        /// <param name="id">The ID of the TODO item to delete</param>
+        /// <returns>Success message if deleted</returns>
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> DeleteTodo(int id)
+        {
+            _logger.LogInformation("Deleting todo with id: {Id}", id);
 
-    public class UpdateTodoRequest
-    {
-        public int Id { get; set; }
-        public string Title { get; set; }
-        public string Description { get; set; }
-        public bool IsCompleted { get; set; }
-    }
+            var result = await _todoService.DeleteTodoAsync(id);
+            if (!result)
+            {
+                return NotFound($"Todo with id {id} not found");
+            }
 
-    public class DeleteTodoRequest
-    {
-        public int Id { get; set; }
+            return Ok(new { message = "Todo deleted successfully" });
+        }
     }
 }

@@ -1,11 +1,9 @@
-using System.ComponentModel.DataAnnotations;
-
-namespace TodoApi.Models
+namespace TodoApi.DTOs
 {
     /// <summary>
-    /// Represents a TODO item entity
+    /// Data transfer object for TODO item responses
     /// </summary>
-    public class Todo
+    public class TodoDto
     {
         /// <summary>
         /// Gets or sets the unique identifier
@@ -15,18 +13,15 @@ namespace TodoApi.Models
         /// <summary>
         /// Gets or sets the title
         /// </summary>
-        [Required]
-        [MaxLength(200)]
-        public string Title { get; set; } = string.Empty;
+        public required string Title { get; set; }
         
         /// <summary>
         /// Gets or sets the description
         /// </summary>
-        [MaxLength(1000)]
         public string? Description { get; set; }
         
         /// <summary>
-        /// Gets or sets whether the TODO is completed
+        /// Gets or sets the completion status
         /// </summary>
         public bool IsCompleted { get; set; }
         
