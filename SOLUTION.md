@@ -1,7 +1,7 @@
 ﻿# TODO API Refactoring Solution
 
-**Candidate Name:** [Your Name]  
-**Completion Date:** [Date]
+**Candidate Name:** Akshay Mali  
+**Completion Date:** 13/01/2026
 
 ---
 
